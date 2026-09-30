@@ -1,4 +1,4 @@
-name: Build S24 Ultra APK
+name: Build S24 Ultra APK & Self-Heal
 
 on:
   push:
@@ -11,71 +11,106 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Free Up Disk Space
+      - name: Free Up System Disk Space
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /opt/ghc
           sudo rm -rf /usr/local/lib/android
           df -h
 
-      - name: Set up Python
+      - name: Set up Python Environment
         uses: actions/setup-python@v5
         with:
           python-version: '3.10'
 
-      - name: Set up Java
+      - name: Set up Java JDK 17
         uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install System Dependencies
+      - name: Install System and Architecture Dependencies
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
           sudo apt-get install -y \
-            python3-pip \
-            build-essential \
-            git \
-            python3-dev \
-            ffmpeg \
-            libsdl2-dev \
-            libsdl2-image-dev \
-            libsdl2-mixer-dev \
-            libsdl2-ttf-dev \
-            libportmidi-dev \
-            libswscale-dev \
-            libavformat-dev \
-            libavcodec-dev \
-            libltdl-dev \
-            zlib1g-dev \
-            unzip \
-            ant \
-            autoconf \
-            libtool \
-            pkg-config \
-            libncurses5:i386 \
-            libstdc++6:i386 \
-            zlib1g:i386
+            python3-pip build-essential git python3-dev ffmpeg \
+            libsdl2-dev libsdl2-image-dev libsdl2-mixer-dev libsdl2-ttf-dev \
+            libportmidi-dev libswscale-dev libavformat-dev libavcodec-dev \
+            libltdl-dev zlib1g-dev unzip ant autoconf libtool pkg-config \
+            libncurses5:i386 libstdc++6:i386 libz1:i386
 
-      - name: Install Buildozer and Cython
+      - name: Install Buildozer, Cython, and Requests
         run: |
           pip install --upgrade pip
           pip install cython==3.0.8 buildozer requests
 
-      - name: Pre-create Android SDK License Folders
+      - name: Autonomous Self-Healing Environment Setup
         run: |
-          mkdir -p /home/runner/.buildozer/android/platform/android-sdk/licenses
-          echo "24333f1a43ef661ef218c0130af61e545e1ebd1d" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > /home/runner/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+          echo "[AI-WORKFLOW] Initializing self-healing environment..."
+          SDK_BASE="$HOME/.buildozer/android/platform/android-sdk"
+          CMD_TOOLS="$SDK_BASE/cmdline-tools/latest"
+          LICENSES="$SDK_BASE/licenses"
 
-      - name: Build APK with Buildozer
+          # Create directories if missing
+          mkdir -p "$CMD_TOOLS"
+          mkdir -p "$LICENSES"
+
+          # Force-inject Google Android SDK licenses to prevent blocks
+          echo "24333f1a43ef661ef218c0130af61e545e1ebd1d" > "$LICENSES/android-sdk-license"
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$LICENSES/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$LICENSES/android-sdk-preview-license"
+
+          # Auto-download command-line tools if sdkmanager is missing
+          if [ ! -f "$CMD_TOOLS/bin/sdkmanager" ]; then
+            echo "[AI-WORKFLOW] 'sdkmanager' missing. Downloading and repairing automatically..."
+            TEMP_DIR=$(mktemp -d)
+            cd "$TEMP_DIR"
+            curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+            unzip -o commandlinetools-linux-11076708_latest.zip
+            rm -rf "$CMD_TOOLS/*"
+            mv cmdline-tools/* "$CMD_TOOLS/"
+            cd -
+            rm -rf "$TEMP_DIR"
+            echo "[AI-WORKFLOW] Command-line tools successfully repaired!"
+          else
+            echo "[AI-WORKFLOW] SDK tools are already intact."
+          fi
+
+      - name: Execute Buildozer with Auto-Recovery Loop
         run: |
-          buildozer -v android debug
+          export PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$HOME/.buildozer/android/platform/android-sdk/platform-tools
+          
+          MAX_RETRIES=3
+          ATTEMPT=1
+          SUCCESS=0
+
+          while [ $ATTEMPT -le $MAX_RETRIES ]; do
+            echo "[AI-WORKFLOW] Build Attempt $ATTEMPT of $MAX_RETRIES..."
+            if buildozer -v android debug; then
+              SUCCESS=1
+              break
+            else
+              echo "[AI-WORKFLOW] Build failed. Self-healing and retrying..."
+              yes | sdkmanager --licenses || true
+              sleep 5
+              ATTEMPT=$((ATTEMPT + 1))
+            fi
+          done
+
+          if [ $SUCCESS -eq 0 ]; then
+            echo "[AI-WORKFLOW] All build attempts failed."
+            exit 1
+          fi
+
+      - name: Verify and Prepare Artifact for Updater
+        run: |
+          echo "[AI-WORKFLOW] Preparing generated APK for deployment and updater sync..."
+          ls -lh bin/*.apk
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: package
           path: bin/*.apk
+
