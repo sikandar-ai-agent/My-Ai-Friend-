@@ -1,4 +1,4 @@
-name: Build S24 Ultra APK & Self-Heal
+name: Build S24 Ultra APK
 
 on:
   push:
@@ -29,7 +29,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install System and Architecture Dependencies
+      - name: Install System Dependencies
         run: |
           sudo dpkg --add-architecture i386
           sudo apt-get update
@@ -40,77 +40,40 @@ jobs:
             libltdl-dev zlib1g-dev unzip ant autoconf libtool pkg-config \
             libncurses5:i386 libstdc++6:i386 libz1:i386
 
-      - name: Install Buildozer, Cython, and Requests
+      - name: Install Buildozer and Cython
         run: |
           pip install --upgrade pip
           pip install cython==3.0.8 buildozer requests
 
-      - name: Autonomous Self-Healing Environment Setup
+      - name: Setup Android SDK Path and Tools
         run: |
-          echo "[AI-WORKFLOW] Initializing self-healing environment..."
           SDK_BASE="$HOME/.buildozer/android/platform/android-sdk"
-          CMD_TOOLS="$SDK_BASE/cmdline-tools/latest"
-          LICENSES="$SDK_BASE/licenses"
+          mkdir -p "$SDK_BASE/cmdline-tools"
+          mkdir -p "$SDK_BASE/licenses"
 
-          # Create directories if missing
-          mkdir -p "$CMD_TOOLS"
-          mkdir -p "$LICENSES"
+          echo "24333f1a43ef661ef218c0130af61e545e1ebd1d" > "$SDK_BASE/licenses/android-sdk-license"
+          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$SDK_BASE/licenses/android-sdk-license"
+          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$SDK_BASE/licenses/android-sdk-preview-license"
 
-          # Force-inject Google Android SDK licenses to prevent blocks
-          echo "24333f1a43ef661ef218c0130af61e545e1ebd1d" > "$LICENSES/android-sdk-license"
-          echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$LICENSES/android-sdk-license"
-          echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$LICENSES/android-sdk-preview-license"
-
-          # Auto-download command-line tools if sdkmanager is missing
-          if [ ! -f "$CMD_TOOLS/bin/sdkmanager" ]; then
-            echo "[AI-WORKFLOW] 'sdkmanager' missing. Downloading and repairing automatically..."
+          if [ ! -f "$SDK_BASE/cmdline-tools/latest/bin/sdkmanager" ]; then
             TEMP_DIR=$(mktemp -d)
             cd "$TEMP_DIR"
             curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
             unzip -o commandlinetools-linux-11076708_latest.zip
-            rm -rf "$CMD_TOOLS/*"
-            mv cmdline-tools/* "$CMD_TOOLS/"
+            rm -rf "$SDK_BASE/cmdline-tools/latest"
+            mkdir -p "$SDK_BASE/cmdline-tools/latest"
+            mv cmdline-tools/* "$SDK_BASE/cmdline-tools/latest/"
             cd -
             rm -rf "$TEMP_DIR"
-            echo "[AI-WORKFLOW] Command-line tools successfully repaired!"
-          else
-            echo "[AI-WORKFLOW] SDK tools are already intact."
           fi
 
-      - name: Execute Buildozer with Auto-Recovery Loop
+      - name: Run Buildozer
         run: |
           export PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$HOME/.buildozer/android/platform/android-sdk/platform-tools
-          
-          MAX_RETRIES=3
-          ATTEMPT=1
-          SUCCESS=0
-
-          while [ $ATTEMPT -le $MAX_RETRIES ]; do
-            echo "[AI-WORKFLOW] Build Attempt $ATTEMPT of $MAX_RETRIES..."
-            if buildozer -v android debug; then
-              SUCCESS=1
-              break
-            else
-              echo "[AI-WORKFLOW] Build failed. Self-healing and retrying..."
-              yes | sdkmanager --licenses || true
-              sleep 5
-              ATTEMPT=$((ATTEMPT + 1))
-            fi
-          done
-
-          if [ $SUCCESS -eq 0 ]; then
-            echo "[AI-WORKFLOW] All build attempts failed."
-            exit 1
-          fi
-
-      - name: Verify and Prepare Artifact for Updater
-        run: |
-          echo "[AI-WORKFLOW] Preparing generated APK for deployment and updater sync..."
-          ls -lh bin/*.apk
+          buildozer -v android debug
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: package
           path: bin/*.apk
-
