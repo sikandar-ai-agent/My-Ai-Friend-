@@ -1,3 +1,4 @@
+
 name: Build S24 Ultra APK
 
 on:
@@ -48,28 +49,27 @@ jobs:
       - name: Setup Android SDK Path and Tools
         run: |
           SDK_BASE="$HOME/.buildozer/android/platform/android-sdk"
-          mkdir -p "$SDK_BASE/cmdline-tools"
+          mkdir -p "$SDK_BASE/tools/bin"
           mkdir -p "$SDK_BASE/licenses"
 
           echo "24333f1a43ef661ef218c0130af61e545e1ebd1d" > "$SDK_BASE/licenses/android-sdk-license"
           echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> "$SDK_BASE/licenses/android-sdk-license"
           echo "84831b9409646a918e30573bab4c9c91346d8abd" > "$SDK_BASE/licenses/android-sdk-preview-license"
 
-          if [ ! -f "$SDK_BASE/cmdline-tools/latest/bin/sdkmanager" ]; then
-            TEMP_DIR=$(mktemp -d)
-            cd "$TEMP_DIR"
-            curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-            unzip -o commandlinetools-linux-11076708_latest.zip
-            rm -rf "$SDK_BASE/cmdline-tools/latest"
-            mkdir -p "$SDK_BASE/cmdline-tools/latest"
-            mv cmdline-tools/* "$SDK_BASE/cmdline-tools/latest/"
-            cd -
-            rm -rf "$TEMP_DIR"
-          fi
+          TEMP_DIR=$(mktemp -d)
+          cd "$TEMP_DIR"
+          curl -O https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+          unzip -o commandlinetools-linux-11076708_latest.zip
+          
+          mkdir -p "$SDK_BASE/tools"
+          rm -rf "$SDK_BASE/tools/bin"
+          mv cmdline-tools "$SDK_BASE/tools/bin"
+          cd -
+          rm -rf "$TEMP_DIR"
 
       - name: Run Buildozer
         run: |
-          export PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/cmdline-tools/latest/bin:$HOME/.buildozer/android/platform/android-sdk/platform-tools
+          export PATH=$PATH:$HOME/.buildozer/android/platform/android-sdk/tools/bin:$HOME/.buildozer/android/platform/android-sdk/platform-tools
           buildozer -v android debug
 
       - name: Upload APK Artifact
